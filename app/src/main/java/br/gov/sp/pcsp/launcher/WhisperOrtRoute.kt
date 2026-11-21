@@ -622,7 +622,7 @@ object WhisperOrtRoute {
             android.util.Log.i(
                 TAG,
                 "ort-rota pedida=$rotaPedida motivo=${WhisperOrtHtpRota.motivoRota()} " +
-                    "pacote=${WhisperOrtHtpRota.versaoPacote()}",
+                    "pacote=${WhisperOrtHtpRota.versaoPacote()} threads=$threads",
             )
             val pedido = WhisperOrtTranscriptionProducer.Request(
                 jobId = job.jobId,

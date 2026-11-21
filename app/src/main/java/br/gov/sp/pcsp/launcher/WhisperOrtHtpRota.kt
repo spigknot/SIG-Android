@@ -355,8 +355,9 @@ object WhisperOrtHtpRota {
         ultimoLoadMs = (System.nanoTime() - inicio) / 1_000_000
         android.util.Log.i(
             TAG,
-            "rota=htp soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} " +
-                "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs",
+            "rota=$rota soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} " +
+                "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs " +
+                "decoders_cpu_threads=$threads",
         )
         return WhisperOrtHtpBackend(sessaoHtp, decoders, pacote.dtype, route = rota)
     }

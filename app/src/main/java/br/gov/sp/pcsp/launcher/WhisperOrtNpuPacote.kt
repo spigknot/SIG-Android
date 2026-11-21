@@ -155,7 +155,17 @@ object WhisperOrtNpuPacote {
     /** Progresso observável (só log; a UI não bloqueia por este download). */
     data class Progresso(val baixados: Long, val total: Long, val fase: String)
 
-    fun raiz(context: Context): File = File(context.noBackupFilesDir, "whisper-npu")
+    /**
+     * Hook de TESTE (instrumentação): quando não nulo, a raiz do pacote passa a
+     * ser este diretório. Existe para provar "pacote ausente" com diretório
+     * temporário, sem apagar nem mover o pacote do aparelho. `null` = produção
+     * idêntica (comportamento anterior).
+     */
+    @VisibleForTesting
+    internal var raizParaTeste: File? = null
+
+    fun raiz(context: Context): File =
+        raizParaTeste ?: File(context.noBackupFilesDir, "whisper-npu")
 
     /**
      * R117 §T01 — diretório da versão do manifesto **VERIFICADO**.
